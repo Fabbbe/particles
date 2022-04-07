@@ -42,11 +42,11 @@ struct Particle {
 	float size;
 };
 // This can be increased to about 100 000 with about 60% cpu usage
-const int max_particles = 5000; 
-const float particle_accel = 0.0001f;
-const float particle_init_speed = 0.07;
+const int max_particles = 50000; 
+const float particle_accel = 0.00001f;
+const float particle_init_speed = 0.07f;
 const float particle_size = 0.02f;
-const char particle_color[4] = {255, 255, 255, 70}; // r g b a
+const char particle_color[4] = {255, 60, 60, 100}; // r g b a
 
 int main(int argc, char* argv[]) {
 	SDL_Window* window = NULL;
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
 
 	// INITIALIZATION
 	// ==============
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
 		fprintf(stderr, "Failed to init SDL: %s\n", SDL_GetError());
 	}
 
@@ -157,6 +157,9 @@ int main(int argc, char* argv[]) {
 	glm_look(camera_pos, camera_dir, GLM_YUP, view);
 	glm_perspective(0.5f, 4.0f/3.0f, 0.001f, 1000.0f, proj);
 
+	uint64_t last_t;
+	uint64_t now_t = SDL_GetPerformanceCounter();
+	double delta_t = 1.0f;
 
 	// RUNNING
 	// =======
@@ -185,7 +188,7 @@ int main(int argc, char* argv[]) {
 
 			glm_vec3_normalize(dir_to_middle);
 			
-			glm_vec3_scale(dir_to_middle, particle_accel, dir_to_middle);
+			glm_vec3_scale(dir_to_middle, particle_accel*delta_t, dir_to_middle);
 
 			glm_vec3_add(p->speed, dir_to_middle, p->speed);
 			glm_vec3_add(p->speed, p->pos, p->pos);
@@ -294,6 +297,12 @@ int main(int argc, char* argv[]) {
 		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, particle_count);
 
 		SDL_GL_SwapWindow(window);
+
+		{
+			last_t = now_t;
+			now_t = SDL_GetPerformanceCounter();
+			delta_t = (double)((now_t - last_t)*1000) / SDL_GetPerformanceFrequency(); // in ms
+		}
 	}
 
 	// DESTRUCTION

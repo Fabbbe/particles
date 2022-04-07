@@ -1,5 +1,5 @@
 CC=c99
-CFLAGS=$(shell pkg-config --libs sdl2 gl glew cglm) -Isrc/ # -DNDEBUG
+CFLAGS=$(shell pkg-config --libs sdl2 gl glew cglm) -Isrc/ -O2# -DNDEBUG
 OUTFILE=particles
 
 # Based
