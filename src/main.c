@@ -21,6 +21,9 @@
 
 #include "shader.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #ifndef NDEBUG
 void debugCallback(GLenum source, GLenum type, GLuint id,
    GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
@@ -46,7 +49,7 @@ const int max_particles = 50000;
 const float particle_accel = 0.00001f;
 const float particle_init_speed = 0.07f;
 const float particle_size = 0.02f;
-const char particle_color[4] = {255, 60, 60, 100}; // r g b a
+const char particle_color[4] = {255, 60, 60, 120}; // r g b a
 
 int main(int argc, char* argv[]) {
 	SDL_Window* window = NULL;
@@ -127,6 +130,34 @@ int main(int argc, char* argv[]) {
 	glBindBuffer(GL_ARRAY_BUFFER, particle_color_buffer);
 	glBufferData(GL_ARRAY_BUFFER, max_particles*4*sizeof(unsigned char), NULL, GL_STATIC_DRAW);
 
+	// Image
+	
+	uint32_t tex;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	int width, height, comp;
+	stbi_set_flip_vertically_on_load(true);
+	unsigned char* particle_image = stbi_load("res/particle.png", &width, &height, &comp, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glTexImage2D(
+		GL_TEXTURE_2D, 
+		0,
+		GL_RGBA,
+		width, height,
+		0,
+		GL_RGBA,
+		GL_UNSIGNED_BYTE,
+		particle_image
+	);
+
+	// Particle data
 	struct Particle* particle_container  = malloc(sizeof(struct Particle)*max_particles);
 	float* g_particle_position_size_data = malloc(sizeof(float)*4*max_particles);
 	unsigned char* g_particle_color_data = malloc(sizeof(char)*4*max_particles);
@@ -287,6 +318,8 @@ int main(int argc, char* argv[]) {
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		glBindTexture(GL_TEXTURE_2D, tex);
+		
 		// First argument specifies index of vertex attrib and second argument 
 		// specifies how the buffer advances for every instance
 		// Docs: https://docs.gl/gl3/glVertexAttribDivisor

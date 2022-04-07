@@ -22,5 +22,8 @@ void main() {
 		+ cameraUp_worldspace * squareVerts.y * particleSize;
 
 	gl_Position = VP * vec4(vertexPosition_worldspace, 1.0f);
+
+	UV = squareVerts.xy + vec2(0.5, 0.5);
 	particlecolor = color;
+
 }
