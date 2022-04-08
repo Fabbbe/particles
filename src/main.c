@@ -51,9 +51,14 @@ const float particle_init_speed = 0.07f;
 const float particle_size = 0.02f;
 const char particle_color[4] = {255, 60, 60, 120}; // r g b a
 
+const float fov = 0.5f;
+
 int main(int argc, char* argv[]) {
 	SDL_Window* window = NULL;
 	SDL_GLContext context;
+
+	int window_width = 640;
+	int window_height = 480;
 
 	srand(time(NULL));
 
@@ -68,8 +73,8 @@ int main(int argc, char* argv[]) {
 	window = SDL_CreateWindow(
 		"Particles",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		640, 480,
-		SDL_WINDOW_OPENGL
+		window_width, window_height,
+		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
 	);
 
 	if (window == NULL) {
@@ -186,7 +191,7 @@ int main(int argc, char* argv[]) {
 	vec3 camera_dir = {0.0f, 0.0f, 1.0f};
 
 	glm_look(camera_pos, camera_dir, GLM_YUP, view);
-	glm_perspective(0.5f, 4.0f/3.0f, 0.001f, 1000.0f, proj);
+	glm_perspective(fov, (float)window_width/(float)window_height, 0.001f, 1000.0f, proj);
 
 	uint64_t last_t;
 	uint64_t now_t = SDL_GetPerformanceCounter();
@@ -201,6 +206,21 @@ int main(int argc, char* argv[]) {
 			switch (event.type) {
 				case SDL_QUIT:
 					running = false;
+					break;
+				case SDL_WINDOWEVENT:
+					if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+						SDL_GetWindowSize(window, &window_width, &window_height);
+
+						glm_perspective(
+							fov, 
+							(float)window_width/(float)window_height, 
+							0.001f, 
+							1000.0f, 
+							proj
+						);
+
+						glViewport(0, 0, window_width, window_height);
+					}
 					break;
 			}
 		}
