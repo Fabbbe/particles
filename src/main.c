@@ -49,10 +49,10 @@ const int max_particles = 50000;
 const float particle_accel = 0.00001f;
 const float particle_init_speed = 0.07f;
 const float particle_size = 0.025f;
-const char particle_color[4] = {255, 60, 60, 170}; // r g b a
+const char particle_color[4] = {255, 255, 255, 170}; // r g b a
 
 const float fov = 0.7f;
-const float movespeed = 0.01f;
+const float movespeed = 0.005f;
 
 int main(int argc, char* argv[]) {
 	SDL_Window* window = NULL;
@@ -75,12 +75,13 @@ int main(int argc, char* argv[]) {
 		"Particles",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		window_width, window_height,
-		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
+		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE 
 	);
 
 	if (window == NULL) {
 		fprintf(stderr, "Failed to create window: %s\n", SDL_GetError());
 	}
+	SDL_SetRelativeMouseMode(SDL_TRUE);
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -191,6 +192,9 @@ int main(int argc, char* argv[]) {
 	vec3 camera_pos = {0.0f, 0.0f, -10.0f};
 	vec3 camera_dir = {0.0f, 0.0f, 1.0f};
 
+	float yaw = 0.0f;
+	float pitch = 0.0f;
+
 	glm_look(camera_pos, camera_dir, GLM_YUP, view);
 	glm_perspective(fov, (float)window_width/(float)window_height, 0.001f, 1000.0f, proj);
 
@@ -208,6 +212,18 @@ int main(int argc, char* argv[]) {
 			switch (event.type) {
 				case SDL_QUIT:
 					running = false;
+					break;
+
+				case SDL_MOUSEMOTION:
+					yaw -= 0.0015f * (float)event.motion.xrel;
+					pitch -= 0.0015f * (float)event.motion.yrel;
+					if (pitch > GLM_PI / 2.1f) // Caps so you cant look too far up/down
+						pitch = GLM_PI / 2.1f;
+					else if (pitch < -GLM_PI / 2.1f)
+						pitch = -GLM_PI / 2.1f;
+					camera_dir[0] = sin(yaw) * cos(pitch); //x
+					camera_dir[1] = sin(pitch); //y
+					camera_dir[2] = cos(yaw) * cos(pitch); //z
 					break;
 
 				case SDL_KEYDOWN:
@@ -273,6 +289,7 @@ int main(int argc, char* argv[]) {
 			}
 		}
 		glm_vec3_normalize(move_dir);
+		glm_vec3_rotate(move_dir, yaw, GLM_YUP);
 		glm_vec3_scale(move_dir, movespeed*delta_t, move_dir);
 		glm_vec3_add(camera_pos, move_dir, camera_pos);
 
@@ -378,9 +395,20 @@ int main(int argc, char* argv[]) {
 			(void*)0
 		);
 
+		// Camera matrix math
+		vec3 camera_right, camera_up;
+
+		// Calculate camera right
+		glm_vec3_copy((vec3){1.0f, 0.0f, 0.0f}, camera_right);
+		glm_vec3_rotate(camera_right, yaw, GLM_YUP);
+
+		// Calculate camera up
+		glm_vec3_copy(GLM_YUP, camera_up);
+		glm_vec3_rotate(camera_up, -pitch, camera_right);
+
 		glm_look(camera_pos, camera_dir, GLM_YUP, view);
-		uniform3f(program, "cameraRight_worldspace", (vec3){1.0f, 0.0f, 0.0f}); // might change
-		uniform3f(program, "cameraUp_worldspace", GLM_YUP);
+		uniform3f(program, "cameraUp_worldspace", camera_up);
+		uniform3f(program, "cameraRight_worldspace", camera_right);
 		glm_mat4_mul(proj, view, vp);
 		uniformMatrix4fv(program, "VP", vp);
 
