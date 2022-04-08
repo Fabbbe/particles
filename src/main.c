@@ -48,10 +48,11 @@ struct Particle {
 const int max_particles = 50000; 
 const float particle_accel = 0.00001f;
 const float particle_init_speed = 0.07f;
-const float particle_size = 0.02f;
-const char particle_color[4] = {255, 60, 60, 120}; // r g b a
+const float particle_size = 0.025f;
+const char particle_color[4] = {255, 60, 60, 170}; // r g b a
 
-const float fov = 0.5f;
+const float fov = 0.7f;
+const float movespeed = 0.01f;
 
 int main(int argc, char* argv[]) {
 	SDL_Window* window = NULL;
@@ -199,6 +200,7 @@ int main(int argc, char* argv[]) {
 
 	// RUNNING
 	// =======
+	bool physics = true;
 	bool running = true;
 	while (running) {
 		SDL_Event event;
@@ -207,6 +209,20 @@ int main(int argc, char* argv[]) {
 				case SDL_QUIT:
 					running = false;
 					break;
+
+				case SDL_KEYDOWN:
+					switch (event.key.keysym.sym) { // Run through all the keys
+						case SDLK_F4:
+							if (SDL_GetRelativeMouseMode())
+								SDL_SetRelativeMouseMode(SDL_FALSE);
+							else
+								SDL_SetRelativeMouseMode(SDL_TRUE);
+							break;
+						case SDLK_SPACE:
+							physics = physics ? false : true;
+					}
+					break;
+
 				case SDL_WINDOWEVENT:
 					if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
 						SDL_GetWindowSize(window, &window_width, &window_height);
@@ -225,6 +241,41 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
+		// User input!
+		// -----------
+		
+		vec3 move_dir; // will be the normalized vector to move relative to camera
+		glm_vec3_zero(move_dir);
+		{	// Keyboard state reading and input
+			// This is a nice way of getting game-like input
+			const unsigned char* keyboardState = SDL_GetKeyboardState(NULL); 
+
+			// flying camera controls
+			// I see a lot of people write this by watching for presses/releases 
+			// of these buttons, but that looks like shit
+			if (keyboardState[SDL_SCANCODE_W]) {
+				move_dir[2] = 1.0f;
+			}
+			if (keyboardState[SDL_SCANCODE_A]) {
+				move_dir[0] = 1.0f;
+			}
+			if (keyboardState[SDL_SCANCODE_S]) {
+				move_dir[2] = -1.0f;
+			}
+			if (keyboardState[SDL_SCANCODE_D]) {
+				move_dir[0] = -1.0f;
+			}
+			if (keyboardState[SDL_SCANCODE_Q]) {
+				move_dir[1] = 1.0f;
+			}
+			if (keyboardState[SDL_SCANCODE_E]) {
+				move_dir[1] = -1.0f;
+			}
+		}
+		glm_vec3_normalize(move_dir);
+		glm_vec3_scale(move_dir, movespeed*delta_t, move_dir);
+		glm_vec3_add(camera_pos, move_dir, camera_pos);
+
 		// UPDATE 
 		// ------
 
@@ -234,15 +285,17 @@ int main(int argc, char* argv[]) {
 		for (int i = 0; i < max_particles; ++i) {
 			struct Particle* p = &particle_container[i];
 
+			if (physics) {
 			vec3 dir_to_middle;
-			glm_vec3_negate_to(p->pos, dir_to_middle);
+				glm_vec3_negate_to(p->pos, dir_to_middle);
 
-			glm_vec3_normalize(dir_to_middle);
-			
-			glm_vec3_scale(dir_to_middle, particle_accel*delta_t, dir_to_middle);
+				glm_vec3_normalize(dir_to_middle);
+				
+				glm_vec3_scale(dir_to_middle, particle_accel*delta_t, dir_to_middle);
 
-			glm_vec3_add(p->speed, dir_to_middle, p->speed);
-			glm_vec3_add(p->speed, p->pos, p->pos);
+				glm_vec3_add(p->speed, dir_to_middle, p->speed);
+				glm_vec3_add(p->speed, p->pos, p->pos);
+			}
 
 			g_particle_position_size_data[4*particle_count+0] = p->pos[0];
 			g_particle_position_size_data[4*particle_count+1] = p->pos[1];
@@ -257,7 +310,7 @@ int main(int argc, char* argv[]) {
 			
 			++particle_count;
 		}
-		
+
 		// This is more effective than rewriting the buffer without reallocating it.
 		// Link to explanation: https://www.khronos.org/opengl/wiki/Buffer_Object_Streaming
 		//
@@ -325,8 +378,8 @@ int main(int argc, char* argv[]) {
 			(void*)0
 		);
 
-		
-		uniform3f(program, "cameraRight_worldspace", (vec3){1.0f, 0.0f, 0.0f});
+		glm_look(camera_pos, camera_dir, GLM_YUP, view);
+		uniform3f(program, "cameraRight_worldspace", (vec3){1.0f, 0.0f, 0.0f}); // might change
 		uniform3f(program, "cameraUp_worldspace", GLM_YUP);
 		glm_mat4_mul(proj, view, vp);
 		uniformMatrix4fv(program, "VP", vp);
