@@ -1,3 +1,5 @@
+.vscode
 particles
 *.log
 *.o
+*.exe

@@ -1,13 +1,15 @@
 CC=c99
-CFLAGS=$(shell pkg-config --libs sdl2 gl glew cglm) -Isrc/ -O2# -DNDEBUG
+PACKAGES=sdl2 gl glew cglm
+INCLUDE=$(shell pkg-config --cflags --libs $(PACKAGES)) -Isrc/
+CFLAGS=--std=c99 -O2 $(INCLUDE) # -DNDEBUG
 OUTFILE=particles
 
 # Based
 %.o: src/%.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+	$(CC) -c -o $@ $^ $(CFLAGS)
 
 $(OUTFILE): src/main.c shader.o
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) -o $@ $^ $(CFLAGS)
 
 
 run: $(OUTFILE)
