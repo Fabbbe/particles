@@ -42,25 +42,32 @@ static const float g_vertex_buffer_data[] = {
 };
 
 struct Particle {
-	vec3 pos, speed;
+	vec3          pos, speed;
 	unsigned char r,g,b,a;
-	float size;
+	float         size;
 };
 
-
+// ParticleGravityArguments defines the arguments sent to the seperate 
+// threads that calculate the particle gravity.
+// pp: pointer to ALL particles
+// pp_position: pointer to array containing ALL particle positions
+// pp_color: pointer to array containing ALL particle colors (not in use)
+// start: where in the array the thread should start its work
+// count: how many particles the thread should calculate.
+// delta_t: the delta time for particle physics
 struct ParticleGravityArguments {
 	struct Particle* pp;
-	float* pp_position;
-	unsigned char* pp_color;
-	unsigned int start, count;
-	double delta_t;
+	float*           pp_position;
+	unsigned char*   pp_color;
+	unsigned int     start, count;
+	double           delta_t;
 };
 
 // This can be increased to about 100 000 with about 60% cpu usage
 const int max_particles = 1000000; 
 const float particle_accel = 0.00001f;
 const float particle_init_speed = 0.07f;
-const float particle_size = 0.025f;
+const float particle_size = 0.020f;
 const char particle_color[4] = {255, 255, 255, 170}; // r g b a
 
 const float fov = 0.7f;
@@ -323,59 +330,29 @@ int main(int argc, char* argv[]) {
 		pthread_t threads[NUM_THREADS];
 		struct ParticleGravityArguments arguments[NUM_THREADS];
 		int particle_count = 0;
-		for (int i = 0 ; i < NUM_THREADS ; ++i)
-		{
-			arguments[i].pp = particle_container;
-			arguments[i].pp_position = g_particle_position_size_data;
-			arguments[i].pp_color = g_particle_color_data;
-			arguments[i].count = (max_particles/NUM_THREADS);
-			arguments[i].start = i* (max_particles/NUM_THREADS);
-			arguments[i].delta_t = delta_t;
+		if (physics) {
+			for (int i = 0 ; i < NUM_THREADS ; ++i) {
+				arguments[i].pp = particle_container;
+				arguments[i].pp_position = g_particle_position_size_data;
+				arguments[i].pp_color = g_particle_color_data;
+				arguments[i].count = (max_particles/NUM_THREADS);
+				arguments[i].start = i* (max_particles/NUM_THREADS);
+				arguments[i].delta_t = delta_t;
 
-			printf("Created thread %d\n", i);
-			int t = pthread_create(&threads[i], NULL, particle_apply_gravity, (void*)&arguments[i]);
-			
-			if (t != 0) {
-				fprintf(stderr, "Error in thread creation %d\n", t);
+				int t = pthread_create(&threads[i], NULL, particle_apply_gravity, (void*)&arguments[i]);
+							
+				if (t != 0) {
+					fprintf(stderr, "Error in thread creation %d\n", t);
+				}
+			}
+			for(int i = 0 ; i < NUM_THREADS; ++i) {
+				void* status;
+				int t = pthread_join(threads[i], &status);
+				if (t != 0) {
+					fprintf(stderr, "Error in thread join %d\n", t);
+				}
 			}
 		}
-		for(int i = 0 ; i < NUM_THREADS; ++i) {
-			void* status;
-			int t = pthread_join(threads[i], &status);
-			if (t != 0)
-			{
-				fprintf(stderr, "Error in thread join %d\n", t);
-			}
-		}
-
-
-		// for (int i = 0; i < max_particles; ++i) {
-		// 	struct Particle* p = &particle_container[i];
-
-		// 	if (physics) {
-		// 	vec3 dir_to_middle;
-		// 		glm_vec3_negate_to(p->pos, dir_to_middle);
-
-		// 		glm_vec3_normalize(dir_to_middle);
-				
-		// 		glm_vec3_scale(dir_to_middle, particle_accel*delta_t, dir_to_middle);
-
-		// 		glm_vec3_add(p->speed, dir_to_middle, p->speed);
-		// 		glm_vec3_add(p->speed, p->pos, p->pos);
-		// 	}
-
-		// 	g_particle_position_size_data[4*particle_count+0] = p->pos[0];
-		// 	g_particle_position_size_data[4*particle_count+1] = p->pos[1];
-		// 	g_particle_position_size_data[4*particle_count+2] = p->pos[2];
-
-		// 	g_particle_position_size_data[4*particle_count+3] = p->size;
-
-		// 	g_particle_color_data[4*particle_count+0] = p->r;
-		// 	g_particle_color_data[4*particle_count+1] = p->g;
-		// 	g_particle_color_data[4*particle_count+2] = p->b;
-		// 	g_particle_color_data[4*particle_count+3] = p->a;
-			
-		// 	++particle_count;
 
 		// This is more effective than rewriting the buffer without reallocating it.
 		// Link to explanation: https://www.khronos.org/opengl/wiki/Buffer_Object_Streaming
@@ -405,7 +382,7 @@ int main(int argc, char* argv[]) {
 		glBufferSubData(
 			GL_ARRAY_BUFFER, 
 			0, 
-			// particle_count * sizeof(unsigned char) * 4,
+			//particle_count * sizeof(unsigned char) * 4,
 			max_particles * sizeof(unsigned char) * 4,
 			g_particle_color_data
 		);
@@ -507,6 +484,10 @@ float rand_float() {
 	return (float)rand()/(float)RAND_MAX;
 }
 
+
+// particle_apply_gravity: a thread function that takes a
+// struct ParticleGravityArguments pointer as input and calculates 
+// the physics for all particles within the range specified. 
 void *particle_apply_gravity(void* arguments) {
 	struct ParticleGravityArguments* args = (struct ParticleGravityArguments*)arguments;
 
@@ -514,8 +495,8 @@ void *particle_apply_gravity(void* arguments) {
 		struct Particle* p = &args->pp[i];
 
 		vec3 dir_to_middle;
+		// since gravity is from origin (0,0,0) negating position gives us a vector to origin
 		glm_vec3_negate_to(p->pos, dir_to_middle);
-
 		glm_vec3_normalize(dir_to_middle);
 		
 		glm_vec3_scale(dir_to_middle, particle_accel*args->delta_t, dir_to_middle);
@@ -523,6 +504,7 @@ void *particle_apply_gravity(void* arguments) {
 		glm_vec3_add(p->speed, dir_to_middle, p->speed);
 		glm_vec3_add(p->speed, p->pos, p->pos);
 
+		// These arrays are for OpenGL
 		args->pp_position[4*i+0] = p->pos[0];
 		args->pp_position[4*i+1] = p->pos[1];
 		args->pp_position[4*i+2] = p->pos[2];
