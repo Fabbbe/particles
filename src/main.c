@@ -12,6 +12,8 @@
 #include <math.h>
 #include <time.h>
 
+#include <pthread.h>
+
 #include <GL/glew.h>
 #include <GL/gl.h>
 
@@ -24,12 +26,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#define NUM_THREADS 8
+
 #ifndef NDEBUG
 void debugCallback(GLenum source, GLenum type, GLuint id,
    GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
 #endif
-
-float rand_float();
 
 // A quad to be rendered as particle of length 12
 static const float g_vertex_buffer_data[] = {
@@ -44,8 +46,18 @@ struct Particle {
 	unsigned char r,g,b,a;
 	float size;
 };
+
+
+struct ParticleGravityArguments {
+	struct Particle* pp;
+	float* pp_position;
+	unsigned char* pp_color;
+	unsigned int start, count;
+	double delta_t;
+};
+
 // This can be increased to about 100 000 with about 60% cpu usage
-const int max_particles = 50000; 
+const int max_particles = 1000000; 
 const float particle_accel = 0.00001f;
 const float particle_init_speed = 0.07f;
 const float particle_size = 0.025f;
@@ -54,12 +66,21 @@ const char particle_color[4] = {255, 255, 255, 170}; // r g b a
 const float fov = 0.7f;
 const float movespeed = 0.005f;
 
+
+float rand_float();
+
+void *particle_apply_gravity(void* arguments);
+
 int main(int argc, char* argv[]) {
 	SDL_Window* window = NULL;
 	SDL_GLContext context;
 
 	int window_width = 640;
 	int window_height = 480;
+
+	uint64_t last_t;
+	uint64_t now_t;
+	double delta_t;
 
 	srand(time(NULL));
 
@@ -198,9 +219,9 @@ int main(int argc, char* argv[]) {
 	glm_look(camera_pos, camera_dir, GLM_YUP, view);
 	glm_perspective(fov, (float)window_width/(float)window_height, 0.001f, 1000.0f, proj);
 
-	uint64_t last_t;
-	uint64_t now_t = SDL_GetPerformanceCounter();
-	double delta_t = 1.0f;
+	last_t;
+	now_t = SDL_GetPerformanceCounter();
+	delta_t = 1.0f;
 
 	// RUNNING
 	// =======
@@ -296,37 +317,65 @@ int main(int argc, char* argv[]) {
 		// UPDATE 
 		// ------
 
-		// Update all data for the particles
-		
+		// Update all data for the particles using threads
+		printf("Creating threads\n");
+
+		pthread_t threads[NUM_THREADS];
+		struct ParticleGravityArguments arguments[NUM_THREADS];
 		int particle_count = 0;
-		for (int i = 0; i < max_particles; ++i) {
-			struct Particle* p = &particle_container[i];
+		for (int i = 0 ; i < NUM_THREADS ; ++i)
+		{
+			arguments[i].pp = particle_container;
+			arguments[i].pp_position = g_particle_position_size_data;
+			arguments[i].pp_color = g_particle_color_data;
+			arguments[i].count = (max_particles/NUM_THREADS);
+			arguments[i].start = i* (max_particles/NUM_THREADS);
+			arguments[i].delta_t = delta_t;
 
-			if (physics) {
-			vec3 dir_to_middle;
-				glm_vec3_negate_to(p->pos, dir_to_middle);
-
-				glm_vec3_normalize(dir_to_middle);
-				
-				glm_vec3_scale(dir_to_middle, particle_accel*delta_t, dir_to_middle);
-
-				glm_vec3_add(p->speed, dir_to_middle, p->speed);
-				glm_vec3_add(p->speed, p->pos, p->pos);
-			}
-
-			g_particle_position_size_data[4*particle_count+0] = p->pos[0];
-			g_particle_position_size_data[4*particle_count+1] = p->pos[1];
-			g_particle_position_size_data[4*particle_count+2] = p->pos[2];
-
-			g_particle_position_size_data[4*particle_count+3] = p->size;
-
-			g_particle_color_data[4*particle_count+0] = p->r;
-			g_particle_color_data[4*particle_count+1] = p->g;
-			g_particle_color_data[4*particle_count+2] = p->b;
-			g_particle_color_data[4*particle_count+3] = p->a;
+			printf("Created thread %d\n", i);
+			int t = pthread_create(&threads[i], NULL, particle_apply_gravity, (void*)&arguments[i]);
 			
-			++particle_count;
+			if (t != 0) {
+				fprintf(stderr, "Error in thread creation %d\n", t);
+			}
 		}
+		for(int i = 0 ; i < NUM_THREADS; ++i) {
+			void* status;
+			int t = pthread_join(threads[i], &status);
+			if (t != 0)
+			{
+				fprintf(stderr, "Error in thread join %d\n", t);
+			}
+		}
+
+
+		// for (int i = 0; i < max_particles; ++i) {
+		// 	struct Particle* p = &particle_container[i];
+
+		// 	if (physics) {
+		// 	vec3 dir_to_middle;
+		// 		glm_vec3_negate_to(p->pos, dir_to_middle);
+
+		// 		glm_vec3_normalize(dir_to_middle);
+				
+		// 		glm_vec3_scale(dir_to_middle, particle_accel*delta_t, dir_to_middle);
+
+		// 		glm_vec3_add(p->speed, dir_to_middle, p->speed);
+		// 		glm_vec3_add(p->speed, p->pos, p->pos);
+		// 	}
+
+		// 	g_particle_position_size_data[4*particle_count+0] = p->pos[0];
+		// 	g_particle_position_size_data[4*particle_count+1] = p->pos[1];
+		// 	g_particle_position_size_data[4*particle_count+2] = p->pos[2];
+
+		// 	g_particle_position_size_data[4*particle_count+3] = p->size;
+
+		// 	g_particle_color_data[4*particle_count+0] = p->r;
+		// 	g_particle_color_data[4*particle_count+1] = p->g;
+		// 	g_particle_color_data[4*particle_count+2] = p->b;
+		// 	g_particle_color_data[4*particle_count+3] = p->a;
+			
+		// 	++particle_count;
 
 		// This is more effective than rewriting the buffer without reallocating it.
 		// Link to explanation: https://www.khronos.org/opengl/wiki/Buffer_Object_Streaming
@@ -341,7 +390,8 @@ int main(int argc, char* argv[]) {
 		glBufferSubData(
 			GL_ARRAY_BUFFER, 
 			0, 
-			particle_count * sizeof(float) * 4, 
+			// particle_count * sizeof(float) * 4,
+			max_particles * sizeof(float) * 4,
 			g_particle_position_size_data
 		);
 
@@ -355,7 +405,8 @@ int main(int argc, char* argv[]) {
 		glBufferSubData(
 			GL_ARRAY_BUFFER, 
 			0, 
-			particle_count * sizeof(unsigned char) * 4, 
+			// particle_count * sizeof(unsigned char) * 4,
+			max_particles * sizeof(unsigned char) * 4,
 			g_particle_color_data
 		);
 
@@ -428,7 +479,8 @@ int main(int argc, char* argv[]) {
 		glVertexAttribDivisor(1, 1);
 		glVertexAttribDivisor(2, 1);
 
-		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, particle_count);
+		// glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, particle_count);
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, max_particles);
 
 		SDL_GL_SwapWindow(window);
 
@@ -453,6 +505,36 @@ int main(int argc, char* argv[]) {
 
 float rand_float() {
 	return (float)rand()/(float)RAND_MAX;
+}
+
+void *particle_apply_gravity(void* arguments) {
+	struct ParticleGravityArguments* args = (struct ParticleGravityArguments*)arguments;
+
+	for (unsigned int i = args->start; i < args->start + args->count; ++i) {
+		struct Particle* p = &args->pp[i];
+
+		vec3 dir_to_middle;
+		glm_vec3_negate_to(p->pos, dir_to_middle);
+
+		glm_vec3_normalize(dir_to_middle);
+		
+		glm_vec3_scale(dir_to_middle, particle_accel*args->delta_t, dir_to_middle);
+
+		glm_vec3_add(p->speed, dir_to_middle, p->speed);
+		glm_vec3_add(p->speed, p->pos, p->pos);
+
+		args->pp_position[4*i+0] = p->pos[0];
+		args->pp_position[4*i+1] = p->pos[1];
+		args->pp_position[4*i+2] = p->pos[2];
+
+		args->pp_position[4*i+3] = p->size;
+
+		args->pp_color[4*i+0] = p->r;
+		args->pp_color[4*i+1] = p->g;
+		args->pp_color[4*i+2] = p->b;
+		args->pp_color[4*i+3] = p->a;
+			
+	}
 }
 
 // I could expand this
