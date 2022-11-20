@@ -1,4 +1,4 @@
-CC=c99
+CC=gcc
 PACKAGES=sdl2 gl glew cglm
 INCLUDE=$(shell pkg-config --cflags --libs $(PACKAGES)) -Isrc/
 CFLAGS=--std=c99 -O2 $(INCLUDE) # -DNDEBUG

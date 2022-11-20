@@ -228,7 +228,7 @@ int main(int argc, char* argv[]) {
 
 				case SDL_KEYDOWN:
 					switch (event.key.keysym.sym) { // Run through all the keys
-						case SDLK_F4:
+						case SDLK_ESCAPE:
 							if (SDL_GetRelativeMouseMode())
 								SDL_SetRelativeMouseMode(SDL_FALSE);
 							else
